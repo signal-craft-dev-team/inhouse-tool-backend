@@ -1,4 +1,4 @@
-name: Build & Push to GHCR
+name: Build, Push & Deploy
 
 on:
   push:
@@ -32,3 +32,28 @@ jobs:
           tags: |
             ${{ env.IMAGE }}:latest
             ${{ env.IMAGE }}:${{ github.sha }}
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to Compute Engine
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.INHOUSE_VM_HOST }}
+          username: ${{ secrets.INHOUSE_VM_USER }}
+          key: ${{ secrets.INHOUSE_VM_SSH_KEY }}
+          script: |
+            echo ${{ secrets.GHCR_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker pull ${{ env.IMAGE }}:latest
+            docker stop backend || true
+            docker rm backend || true
+            docker run -d \
+              --name backend \
+              --restart always \
+              -p 8000:8000 \
+              --env-file ~/backend.env \
+              -e GOOGLE_APPLICATION_CREDENTIALS=/app/sa.json \
+              -v ~/inhouse-backend-sa.json:/app/sa.json:ro \
+              ${{ env.IMAGE }}:latest
