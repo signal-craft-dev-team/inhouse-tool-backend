@@ -20,16 +20,48 @@ def get_gcs_client() -> storage.Client:
 
 
 def _get_sliced_gcs_client() -> storage.Client:
-    """GCE 메타데이터 서버 인증 — Project B 버킷 접근용"""
+    """sliced 버킷 접근용 클라이언트.
+
+    우선순위:
+    1. SLICED_BUCKET_CREDENTIALS 키 파일 (지정 시)
+    2. GCE IAM signBlob API (키 파일 없이 서명 가능, IAM Credentials API 필요)
+    3. fallback: 기본 클라이언트 (signed URL 불가)
+    """
     global _sliced_client
     if _sliced_client is None:
-        try:
-            credentials = compute_engine.Credentials()
-            credentials.refresh(Request())
-            _sliced_client = storage.Client(credentials=credentials)
-        except Exception:
-            # 로컬 환경 등 GCE 메타데이터 서버가 없으면 기본 클라이언트 사용
-            _sliced_client = storage.Client()
+        if settings.sliced_bucket_credentials:
+            from google.oauth2 import service_account
+            creds = service_account.Credentials.from_service_account_file(
+                settings.sliced_bucket_credentials,
+                scopes=["https://www.googleapis.com/auth/cloud-platform"],
+            )
+            _sliced_client = storage.Client(credentials=creds)
+        else:
+            try:
+                import google.auth
+                from google.auth.iam import Signer
+                from google.oauth2.service_account import Credentials as SACredentials
+
+                creds, _ = google.auth.default(
+                    scopes=["https://www.googleapis.com/auth/cloud-platform"]
+                )
+                auth_request = Request()
+                creds.refresh(auth_request)
+
+                sa_email = getattr(creds, "service_account_email", None)
+                if sa_email:
+                    signer = Signer(auth_request, creds, sa_email)
+                    signing_creds = SACredentials(
+                        signer=signer,
+                        service_account_email=sa_email,
+                        token_uri="https://oauth2.googleapis.com/token",
+                        scopes=["https://www.googleapis.com/auth/cloud-platform"],
+                    )
+                    _sliced_client = storage.Client(credentials=signing_creds)
+                else:
+                    _sliced_client = storage.Client(credentials=creds)
+            except Exception:
+                _sliced_client = storage.Client()
     return _sliced_client
 
 
@@ -57,7 +89,7 @@ def generate_signed_url(blob_name: str) -> str:
 
 
 def generate_sliced_signed_url(blob_name: str) -> str:
-    blob = get_sliced_bucket().blob(blob_name)
+    blob = _get_sliced_gcs_client().bucket(settings.sliced_bucket_name).blob(blob_name)
     return blob.generate_signed_url(
         expiration=timedelta(seconds=settings.gcs_signed_url_expiration),
         method="GET",

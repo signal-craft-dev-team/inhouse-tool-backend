@@ -52,6 +52,9 @@ def _split_wav(
     server_id: str,
 ) -> list[dict]:
     """Synchronous: splits raw WAV bytes into per-sensor segments. Returns list of slice metadata dicts."""
+    # MongoDB returns naive datetime — explicitly mark as UTC before converting
+    if timestamp_utc.tzinfo is None:
+        timestamp_utc = timestamp_utc.replace(tzinfo=timezone.utc)
     kst = timestamp_utc.astimezone(KST)
     date_str = kst.strftime("%Y%m%d")
     time_str = kst.strftime("%H%M%S")
@@ -123,7 +126,9 @@ async def slice_audio_upload(
     sensor_map_raw = doc.get("sensor_map") or []
     # DB 저장 형식이 dict {"MAC": "success"} 또는 list ["MAC"] 둘 다 허용
     sensor_map: list[str] = list(sensor_map_raw.keys()) if isinstance(sensor_map_raw, dict) else list(sensor_map_raw)
-    timestamp_utc: datetime = doc["timestamp"]
+    ts = doc["timestamp"]
+    # MongoDB naive datetime → explicit UTC
+    timestamp_utc: datetime = ts.replace(tzinfo=timezone.utc) if ts.tzinfo is None else ts
     gcs_path: str = doc.get("gcs_path", "")
 
     if not sensor_map:

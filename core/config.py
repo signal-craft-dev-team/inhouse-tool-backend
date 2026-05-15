@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     # Slices: raw bucket (cross-project, read-only) / sliced bucket (current project)
     raw_bucket_name: str = ""
     sliced_bucket_name: str = ""
+    sliced_bucket_credentials: str = ""  # Project B SA 키 파일 경로 (쓰기 + signed URL 서명용)
 
     # Cloud Scheduler OIDC — service account email; empty = skip verification (dev)
     scheduler_service_account: str = ""
