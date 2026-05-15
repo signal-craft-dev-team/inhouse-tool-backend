@@ -14,8 +14,8 @@ class Settings(BaseSettings):
     # PostgreSQL
     postgres_uri: str
 
-    # Google Cloud Storage
-    gcs_bucket_name: str
+    # Google Cloud Storage (legacy: wav_files 라우트용)
+    gcs_bucket_name: str = ""
     gcs_signed_url_expiration: int = 3600  # seconds
 
     # Slices: raw bucket (cross-project, read-only) / sliced bucket (current project)

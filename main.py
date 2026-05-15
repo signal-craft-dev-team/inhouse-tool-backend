@@ -1,5 +1,8 @@
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+
+logging.basicConfig(level=logging.INFO)
 from fastapi.middleware.cors import CORSMiddleware
 from core.config import settings
 from core.database import connect_db, disconnect_db

@@ -196,7 +196,6 @@ async def trigger_slicing(
         run_slicing_batch,
         db, session, raw_bucket, sliced_bucket, date, server_id,
     )
-
     return {
         "status": "triggered",
         "date": date or (datetime.now(KST) - timedelta(days=1)).strftime("%Y%m%d"),

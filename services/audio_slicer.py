@@ -1,7 +1,10 @@
 import asyncio
 import io
+import logging
 import wave
 from datetime import datetime, timedelta, timezone
+
+logger = logging.getLogger(__name__)
 
 from bson import ObjectId
 from google.cloud import storage
@@ -117,7 +120,9 @@ async def slice_audio_upload(
 ) -> None:
     source_id: ObjectId = doc["_id"]
     server_id: str = doc["server_id"]
-    sensor_map: list[str] = doc.get("sensor_map") or []
+    sensor_map_raw = doc.get("sensor_map") or []
+    # DB 저장 형식이 dict {"MAC": "success"} 또는 list ["MAC"] 둘 다 허용
+    sensor_map: list[str] = list(sensor_map_raw.keys()) if isinstance(sensor_map_raw, dict) else list(sensor_map_raw)
     timestamp_utc: datetime = doc["timestamp"]
     gcs_path: str = doc.get("gcs_path", "")
 
@@ -128,6 +133,8 @@ async def slice_audio_upload(
         )
         return
 
+    logger.info(f"[slicer] start source_id={source_id} server={server_id} gcs={gcs_path}")
+
     await db["audio_upload_logs"].update_one(
         {"_id": source_id},
         {"$set": {"slice_status": "processing"}},
@@ -135,6 +142,7 @@ async def slice_audio_upload(
 
     try:
         sensor_lookup = await _build_sensor_lookup(server_id, session)
+        logger.info(f"[slicer] sensor_lookup={list(sensor_lookup.keys())}")
 
         raw_bytes: bytes = await asyncio.to_thread(
             lambda: raw_bucket.blob(gcs_path).download_as_bytes()
@@ -172,6 +180,7 @@ async def slice_audio_upload(
         )
 
     except Exception as exc:
+        logger.exception(f"[slicer] FAILED source_id={source_id}: {exc}")
         await db["audio_upload_logs"].update_one(
             {"_id": source_id},
             {"$set": {"slice_status": "failed"}},
@@ -215,6 +224,7 @@ async def run_slicing_batch(
 
     docs = await db["audio_upload_logs"].find(query).to_list(length=None)
 
+    logger.info(f"[batch] date={date} server={server_id} → {len(docs)} docs to process")
     results = {"total": len(docs), "done": 0, "failed": 0}
     for doc in docs:
         try:
