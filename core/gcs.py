@@ -38,28 +38,24 @@ def _get_sliced_gcs_client() -> storage.Client:
             _sliced_client = storage.Client(credentials=creds)
         else:
             try:
-                import google.auth
                 from google.auth.iam import Signer
                 from google.oauth2.service_account import Credentials as SACredentials
 
-                creds, _ = google.auth.default(
-                    scopes=["https://www.googleapis.com/auth/cloud-platform"]
-                )
+                # GOOGLE_APPLICATION_CREDENTIALS(Project A SA)를 우회하고
+                # GCE 메타데이터 서버(Project B SA)를 명시적으로 사용
                 auth_request = Request()
-                creds.refresh(auth_request)
+                gce_creds = compute_engine.Credentials()
+                gce_creds.refresh(auth_request)
 
-                sa_email = getattr(creds, "service_account_email", None)
-                if sa_email:
-                    signer = Signer(auth_request, creds, sa_email)
-                    signing_creds = SACredentials(
-                        signer=signer,
-                        service_account_email=sa_email,
-                        token_uri="https://oauth2.googleapis.com/token",
-                        scopes=["https://www.googleapis.com/auth/cloud-platform"],
-                    )
-                    _sliced_client = storage.Client(credentials=signing_creds)
-                else:
-                    _sliced_client = storage.Client(credentials=creds)
+                sa_email = gce_creds.service_account_email
+                signer = Signer(auth_request, gce_creds, sa_email)
+                signing_creds = SACredentials(
+                    signer=signer,
+                    service_account_email=sa_email,
+                    token_uri="https://oauth2.googleapis.com/token",
+                    scopes=["https://www.googleapis.com/auth/cloud-platform"],
+                )
+                _sliced_client = storage.Client(credentials=signing_creds)
             except Exception:
                 _sliced_client = storage.Client()
     return _sliced_client
