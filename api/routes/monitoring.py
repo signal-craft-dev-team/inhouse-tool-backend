@@ -47,14 +47,20 @@ async def list_places(
     return {"total": total, "page": page, "page_size": page_size, "items": [dict(r) for r in rows]}
 
 
+def _parse_range(date_from: str, date_to: str) -> tuple[datetime, datetime]:
+    start = datetime.strptime(date_from, "%Y-%m-%d")
+    end = datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
+    return start, end
+
+
 @router.get("/server-status")
 async def get_server_status(
     server_id: str,
-    date: str = Query(..., description="YYYY-MM-DD"),
+    date_from: str = Query(..., description="YYYY-MM-DD"),
+    date_to: str = Query(..., description="YYYY-MM-DD"),
     db: AsyncIOMotorDatabase = Depends(get_mongo_db),
 ):
-    start = datetime.strptime(date, "%Y-%m-%d")
-    end = start + timedelta(days=1)
+    start, end = _parse_range(date_from, date_to)
 
     docs = await db["server_status_logs"].find(
         {"server_id": server_id, "timestamp": {"$gte": start, "$lt": end}},
@@ -63,7 +69,6 @@ async def get_server_status(
 
     return {
         "server_id": server_id,
-        "date": date,
         "events": [
             {
                 "timestamp": d["timestamp"].isoformat(),
@@ -77,11 +82,11 @@ async def get_server_status(
 @router.get("/sensor-status")
 async def get_sensor_status(
     server_id: str,
-    date: str = Query(..., description="YYYY-MM-DD"),
+    date_from: str = Query(..., description="YYYY-MM-DD"),
+    date_to: str = Query(..., description="YYYY-MM-DD"),
     db: AsyncIOMotorDatabase = Depends(get_mongo_db),
 ):
-    start = datetime.strptime(date, "%Y-%m-%d")
-    end = start + timedelta(days=1)
+    start, end = _parse_range(date_from, date_to)
 
     docs = await db["sensor_status_logs"].find(
         {"server_id": server_id, "timestamp": {"$gte": start, "$lt": end}},
@@ -90,7 +95,6 @@ async def get_sensor_status(
 
     return {
         "server_id": server_id,
-        "date": date,
         "events": [
             {
                 "timestamp": d["timestamp"].isoformat(),
@@ -105,13 +109,13 @@ async def get_sensor_status(
 @router.get("/errors")
 async def get_errors(
     server_id: str,
-    date: str = Query(..., description="YYYY-MM-DD"),
+    date_from: str = Query(..., description="YYYY-MM-DD"),
+    date_to: str = Query(..., description="YYYY-MM-DD"),
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=50),
     db: AsyncIOMotorDatabase = Depends(get_mongo_db),
 ):
-    start = datetime.strptime(date, "%Y-%m-%d")
-    end = start + timedelta(days=1)
+    start, end = _parse_range(date_from, date_to)
     query = {"server_id": server_id, "received_at": {"$gte": start, "$lt": end}}
     skip = (page - 1) * page_size
 
