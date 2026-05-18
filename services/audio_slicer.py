@@ -200,6 +200,7 @@ async def run_slicing_batch(
     sliced_bucket: storage.Bucket,
     date: str | None = None,
     server_id: str | None = None,
+    retry_failed: bool = False,
 ) -> dict:
     """Processes all pending audio_upload_logs for the given date (YYYYMMDD) and optional server_id."""
     if date:
@@ -219,8 +220,9 @@ async def run_slicing_batch(
         utc_start = yesterday_kst.astimezone(timezone.utc)
         utc_end = utc_start + timedelta(days=1)
 
+    slice_status_filter = ["pending", None, "failed"] if retry_failed else ["pending", None]
     query: dict = {
-        "slice_status": {"$in": ["pending", None]},
+        "slice_status": {"$in": slice_status_filter},
         "timestamp": {"$gte": utc_start, "$lt": utc_end},
         "status": "success",
     }

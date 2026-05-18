@@ -183,6 +183,7 @@ async def trigger_slicing(
     background_tasks: BackgroundTasks,
     date: str | None = Query(None, description="처리 대상 날짜 YYYYMMDD (KST), 기본값: 어제"),
     server_id: str | None = Query(None),
+    retry_failed: bool = Query(False, description="true=failed 상태 도큐먼트도 재처리"),
     authorization: Annotated[str | None, Header()] = None,
     db: AsyncIOMotorDatabase = Depends(get_mongo_db),
     session: AsyncSession = Depends(get_pg_session),
@@ -194,10 +195,11 @@ async def trigger_slicing(
 
     background_tasks.add_task(
         run_slicing_batch,
-        db, session, raw_bucket, sliced_bucket, date, server_id,
+        db, session, raw_bucket, sliced_bucket, date, server_id, retry_failed,
     )
     return {
         "status": "triggered",
         "date": date or (datetime.now(KST) - timedelta(days=1)).strftime("%Y%m%d"),
         "server_id": server_id,
+        "retry_failed": retry_failed,
     }
